@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>iPhony</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; display: flex; height: 100vh; align-items: center; justify-content: center; overflow: hidden; background: #fff; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; user-select: none; }
+  .chassis { height: 655px; width: 315px; border-radius: 55px; border: 4px solid #32374A; background: #000; padding: 4px; }
+  .screen { position: relative; height: 100%; width: 100%; overflow: hidden; border-radius: 50px;
+    background: url('https://media.idownloadblog.com/wp-content/uploads/2026/06/iOS-27-wallpaper-Gold.jpg') center/cover, linear-gradient(160deg, #f5d58a, #c8963e 55%, #6b4a1e); }
+  .island { position: absolute; left: 50%; top: 12px; z-index: 30; height: 32px; width: 100px; transform: translateX(-50%); border-radius: 55px; background: #000; }
+
+  /* Home Screen (apps + dock) */
+  .home-screen { position: absolute; inset: 0; z-index: 5; opacity: 0; pointer-events: none; transition: opacity .4s ease-out; }
+  .home-screen.visible { opacity: 1; pointer-events: auto; }
+  .app-grid { position: absolute; top: 64px; left: 0; right: 0; padding: 0 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 0; justify-items: center; }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .app img { width: 56px; height: 56px; border-radius: 14px; background: rgba(255,255,255,.25); object-fit: cover; -webkit-user-drag: none; transition: transform .15s; }
+  .app:active img { transform: scale(.92); }
+  .app span { font-size: 10px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+
+  /* Dock */
+  .dock {
+    position: absolute; bottom: 20px; left: 10px; right: 10px; height: 76px;
+    display: flex; align-items: center; justify-content: space-around;
+    border-radius: 30px;
+    background: rgba(255,255,255,.18);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+  .dock .app { position: relative; z-index: 1; }
+
+  /* Lock Screen Container */
+  .lock-screen { position: absolute; inset: 0; z-index: 10; transition: transform 0.4s ease-out, opacity 0.4s ease-out; }
+  .lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+
+  .lock { position: absolute; left: 0; right: 0; top: 64px; display: flex; flex-direction: column; align-items: center; color: #fff; filter: drop-shadow(0 4px 3px rgba(0,0,0,.07)) drop-shadow(0 2px 2px rgba(0,0,0,.06)); }
+  .date { font-size: 12px; line-height: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; opacity: .9; }
+  .time { font-size: 60px; line-height: 1; font-weight: 700; letter-spacing: -.025em; }
+  .home { position: absolute; bottom: 8px; left: 50%; z-index: 20; height: 4px; width: 128px; transform: translateX(-50%); border-radius: 9999px; background: rgba(255,255,255,.8); }
+
+  /* Boot Screen */
+  .boot { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; transition: opacity .7s; }
+  .boot.hidden { opacity: 0; }
+  .logo { width: 60px; height: 60px; margin-bottom: 64px; fill: #fff; }
+  .bar { height: 3px; width: 144px; overflow: hidden; border-radius: 9999px; background: #333; }
+  .fill { height: 100%; background: #fff; animation: progress 3s cubic-bezier(.4, 0, .2, 1) forwards; }
+  @keyframes progress { from { width: 0; } to { width: 100%; } }
+
+  /* Welcome / Sign in */
+  .chassis.pre { visibility: hidden; }
+  .chassis.pre * { animation-play-state: paused; }
+  .welcome { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: #fff; color: #111; transition: opacity .5s ease, visibility .5s; }
+  .welcome.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+  .welcome form { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 12px; user-select: auto; }
+  .welcome .mark { width: 36px; height: 36px; fill: #111; margin-bottom: 20px; }
+  .welcome h1 { margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -.02em; }
+  .welcome p { margin: 0 0 16px; font-size: 15px; color: #6b6b70; }
+  .welcome input { width: 100%; height: 48px; padding: 0 14px; font: inherit; font-size: 16px; color: #111; background: #f4f4f5; border: 1px solid transparent; border-radius: 12px; outline: none; transition: border-color .15s, background .15s; }
+  .welcome input:focus { background: #fff; border-color: #111; }
+  .welcome button { height: 48px; margin-top: 8px; font: inherit; font-size: 16px; font-weight: 600; color: #fff; background: #111; border: 0; border-radius: 999px; transition: opacity .15s, transform .15s; }
+  .welcome button:hover { opacity: .85; }
+  .welcome button:active { transform: scale(.98); }
+  .welcome button:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+  .welcome .error { min-height: 18px; margin: 0; font-size: 13px; color: #c62828; }
+
+  /* READ : avertissement */
+  .welcome .read { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 8px 12px; font-size: 13px; font-weight: 600; color: #111; text-decoration: underline; text-underline-offset: 3px; }
+  .welcome .read:focus-visible { outline: 2px solid #111; outline-offset: 2px; border-radius: 6px; }
+  dialog.notice { width: calc(100% - 48px); max-width: 360px; padding: 28px 24px 20px; border: 0; border-radius: 20px; background: #fff; color: #111; box-shadow: 0 20px 60px rgba(0,0,0,.25); user-select: auto; }
+  dialog.notice::backdrop { background: rgba(0,0,0,.4); }
+  dialog.notice h2 { margin: 0 0 12px; font-size: 20px; letter-spacing: -.01em; }
+  dialog.notice p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: #333; }
+  dialog.notice button { width: 100%; height: 44px; margin-top: 8px; font: inherit; font-size: 15px; font-weight: 600; color: #fff; background: #111; border: 0; border-radius: 999px; }
+  dialog.notice button:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+  .welcome .switch { align-self: center; margin-top: 4px; font-size: 14px; color: #6b6b70; text-decoration: underline; text-underline-offset: 3px; }
+  .welcome .switch:focus-visible { outline: 2px solid #111; outline-offset: 2px; border-radius: 6px; }
+  .welcome button:disabled { opacity: .5;  }
+
+  /* App window + App Store */
+  [hidden] { display: none !important; }
+  .home { cursor: default; } .home::before { content: ''; position: absolute; inset: -14px -24px; } .home.dark { background: rgba(128,128,136,.85); }
+  .app-window { position: absolute; inset: 0; z-index: 15; display: none; flex-direction: column; background: #000; color: #111; }
+  .app-window.open { display: flex; }
+  .app-window iframe { display: block; flex: 1; width: 100%; border: 0; background: #000; }
+  .store { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 52px; background: #fff; user-select: auto; }
+  .store-head { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 6px 14px 10px 16px; }
+  .store-head .t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .store h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { font-size: 20px; font-weight: 600; color: #8e8e93; white-space: nowrap; }
+  .avatar { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: linear-gradient(#a0a0a8, #7c7c84); color: #fff; font: inherit; font-size: 12px; font-weight: 600; }
+  .acct { position: absolute; z-index: 5; right: 14px; top: 46px; width: 190px; padding: 10px; border-radius: 14px; background: #fff; box-shadow: 0 8px 28px rgba(0,0,0,.22); }
+  .acct small { display: block; margin: 0 4px 6px; font-size: 11px; color: #8e8e93; overflow: hidden; text-overflow: ellipsis; }
+  #logout { width: 100%; height: 34px; border: 0; border-radius: 10px; background: #f2f2f7; font: inherit; font-size: 13px; font-weight: 600; color: #d32f2f; }
+  .store-body { flex: 1; overflow-y: auto; padding: 4px 14px 14px; }
+  .card { position: relative; height: 250px; margin-bottom: 16px; border-radius: 20px; overflow: hidden; background: #222; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+  .card .bg { position: absolute; top: -24px; left: -24px; width: calc(100% + 48px); height: calc(100% + 48px); object-fit: cover; filter: blur(22px) saturate(1.4); }
+  .card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.08) 30%, rgba(0,0,0,.6)); }
+  .card .ic { position: absolute; z-index: 1; left: 50%; top: 30px; width: 92px; height: 92px; margin-left: -46px; border-radius: 22px; object-fit: cover; background: #fff; box-shadow: 0 8px 22px rgba(0,0,0,.3); }
+  .card .foot { position: absolute; z-index: 1; left: 16px; right: 16px; bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .card .info { flex: 1; min-width: 0; }
+  .card b { display: block; font-size: 16px; text-shadow: 0 1px 3px rgba(0,0,0,.3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card small { display: block; font-size: 12px; color: rgba(255,255,255,.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .act { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .get { height: 30px; padding: 0 20px; border: 0; border-radius: 15px; background: rgba(255,255,255,.3); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; font: inherit; font-size: 14px; font-weight: 700; }
+  .del { border: 0; background: none; padding: 0; font: inherit; font-size: 10px; color: rgba(255,255,255,.85); }
+  .del.armed { color: #ff7b7b; font-weight: 700; }
+  .empty { margin: 60px 0; text-align: center; font-size: 14px; color: #8e8e93; }
+  #imp label { display: block; margin-bottom: 10px; padding: 10px 12px; border-radius: 14px; background: #f2f2f7; font-size: 13px; font-weight: 600; }
+  #imp input[type=file] { display: block; width: 100%; margin-top: 6px; font-size: 12px; }
+  #imp .hint { margin: 0 2px 12px; font-size: 11px; color: #8e8e93; word-break: break-all; }
+  #imp-size { margin: 0 2px 8px; font-size: 14px; font-weight: 700; }
+  #imp-msg { min-height: 16px; margin: 0 2px 8px; font-size: 12px; color: #d32f2f; }
+  #imp .pub { width: 100%; height: 46px; border: 0; border-radius: 14px; background: #007aff; color: #fff; font: inherit; font-size: 16px; font-weight: 600; }
+  #imp .pub:disabled { opacity: .5; }
+  .app { -webkit-touch-callout: none; }
+  .ctx { position: absolute; z-index: 8; width: 150px; padding: 4px; border-radius: 14px; background: rgba(255,255,255,.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+  .ctx button { width: 100%; height: 36px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 14px; font-weight: 600; color: #d32f2f; text-align: left; padding: 0 12px; }
+  .ctx button:active { background: rgba(0,0,0,.06); }
+  .tabs { display: flex; padding: 6px 0 24px; border-top: 1px solid rgba(0,0,0,.1); background: rgba(250,250,252,.92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+  .tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; padding: 4px 0; font: inherit; font-size: 10px; font-weight: 500; color: #8e8e93; }
+  .tabs svg { width: 26px; height: 26px; }
+  .tabs button.on { color: #007aff; }
+
+  /* Appareil photo */
+  .cam{position:absolute;inset:0;z-index:15;display:none;flex-direction:column;background:#000;color:#fff}
+  .cam.open{display:flex}
+  .cam svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .cam-top{height:52px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 6px}
+  .cam-top button,.cam-flip{border:0;background:rgba(255,255,255,.14);color:#fff;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font:inherit;font-size:11px;font-weight:700}
+  .cam-top button.on{background:#ffd60a;color:#000}
+  #c-timer[data-v] svg{display:none}#c-timer[data-v]::after{content:attr(data-v) "s"}
+  .cam-view{position:relative;flex:none;width:100%;aspect-ratio:3/4;overflow:hidden;background:#111;border-radius:14px}
+  .cam-view video{width:100%;height:100%;object-fit:cover;transition:transform .25s}
+  .zoom{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;padding:4px;border-radius:20px;background:rgba(0,0,0,.35)}
+  .zoom button{width:30px;height:30px;border:0;border-radius:50%;background:none;color:#fff;font:inherit;font-size:12px;font-weight:700}
+  .zoom button.on{background:#ffd60a;color:#000}
+  .rec{position:absolute;top:10px;left:50%;transform:translateX(-50%);padding:3px 10px;border-radius:12px;background:#ff3b30;font-size:12px;font-weight:700}
+  .count{position:absolute;inset:0;display:grid;place-items:center;font-size:96px;font-weight:200;text-shadow:0 2px 12px rgba(0,0,0,.5);pointer-events:none}
+  .flashfx{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+  .cam-msg{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:13px;color:#aaa;background:#111}
+  .cam-bot{flex:1;display:flex;flex-direction:column;justify-content:center;gap:4px;padding-bottom:14px}
+  .modes{display:flex;justify-content:center;gap:22px;font-size:12px;font-weight:700;letter-spacing:.05em}
+  .modes button{border:0;background:none;color:#fff;opacity:.6;font:inherit;padding:10px 8px}
+  .cam.recording .modes{visibility:hidden}.cam.recording .cam-flip,.cam.recording .thumb,.cam.recording .cam-top button{opacity:.3;pointer-events:none}
+  .modes button.on{color:#ffd60a;opacity:1}
+  .shut-row{display:flex;align-items:center;justify-content:space-between;padding:0 28px}
+  .thumb{width:44px;height:44px;border-radius:10px;border:2px solid rgba(255,255,255,.4);background:#222 center/cover;padding:0}
+  .cam-flip{width:44px;height:44px}.cam-flip svg{width:22px;height:22px}
+  .shut{width:68px;height:68px;border-radius:50%;border:4px solid #fff;background:none;padding:3px}
+  .shut i{display:block;width:100%;height:100%;border-radius:50%;background:#fff;transition:all .15s}
+  .shut.video i{background:#ff3b30}.shut.recording i{border-radius:8px;transform:scale(.55)}.shut:active i{transform:scale(.88)}
+  .gal,.gal-view{position:absolute;inset:0;display:none;flex-direction:column;background:#000;padding-top:52px}
+  .gal{z-index:2}.gal-view{z-index:3}.gal.open,.gal-view.open{display:flex}
+  .gal-head{display:flex;justify-content:space-between;align-items:center;padding:6px 16px 10px;font-size:13px;font-weight:600}
+  .gal-head button,.gal-view .vbar button{border:0;background:none;color:#0a84ff;font:inherit;font-size:15px}
+  .gal-grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;align-content:start}
+  .gal-grid div{position:relative;aspect-ratio:1;background:#222 center/cover}
+  .gal-grid span{position:absolute;right:4px;bottom:3px;font-size:10px;font-weight:700;text-shadow:0 1px 2px #000}
+  .gal-view .stage{flex:1;min-height:0;display:grid;place-items:center}
+  .gal-view .stage>*{max-width:100%;max-height:100%}
+  .gal-view .vbar{display:flex;justify-content:space-between;padding:12px 20px 28px}
+  .perm{position:absolute;inset:0;z-index:25;display:grid;place-items:center;background:rgba(0,0,0,.4)}
+  .pbox{width:240px;border-radius:16px;background:rgba(245,245,247,.97);color:#111;text-align:center;overflow:hidden}
+  .pbox b{display:block;padding:16px 16px 4px;font-size:15px}.pbox p{margin:0;padding:0 16px 14px;font-size:12px;color:#444}
+  .pbox button{width:50%;height:44px;border:0;border-top:1px solid rgba(0,0,0,.15);background:none;font:inherit;font-size:15px;color:#007aff}
+  #perm-ok{font-weight:700;border-left:1px solid rgba(0,0,0,.15)}
+  .doc{font-size:12px;line-height:1.5;color:#333;user-select:text}.doc h3{margin:14px 0 4px;font-size:14px}
+  .doc pre{white-space:pre-wrap;margin:6px 0;padding:10px;border-radius:12px;background:#f2f2f7;font-size:11px}
+</style>
+</head>
+<body>
+  <!-- Page d'accueil -->
+  <main id="welcome" class="welcome gone">
+    <form id="signin" novalidate>
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+      <h1>Bienvenue sur iPhony</h1>
+      <p>Connectez-vous pour ouvrir iPhony.</p>
+      <input id="email" type="email" placeholder="E-mail" autocomplete="email" aria-label="E-mail">
+      <input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password" aria-label="Mot de passe">
+      <p id="error" class="error" role="alert"></p>
+      <button id="submit-btn" type="submit">Se connecter</button>
+      <a href="#" id="switch-link" class="switch">Créer un compte</a>
+    </form>
+    <a href="#" id="read-link" class="read">READ</a>
+  </main>
+
+  <dialog id="notice" class="notice" aria-labelledby="notice-title">
+    <h2 id="notice-title">iPhony n'est pas un produit Apple</h2>
+    <p>iPhony est un projet indépendant, créé à titre éducatif et de démonstration. Il n'est ni affilié, ni approuvé, ni sponsorisé par Apple Inc.</p>
+    <p>Apple, iPhone, iOS et le logo Apple sont des marques déposées d'Apple Inc. Elles ne sont citées qu'à titre de référence.</p>
+    <p>Ce simulateur n'est pas un vrai iPhone et ne cherche pas à se faire passer pour un produit ou un service Apple.</p>
+    <button type="button" id="notice-close">J'ai compris</button>
+  </dialog>
+
+  <div class="chassis pre" id="chassis">
+    <div id="screen" class="screen">
+      <div class="island"></div>
+
+      <!-- Home Screen -->
+      <div id="home-screen" class="home-screen">
+        <!-- Apps hors dock -->
+        <div class="app-grid">
+          <div class="app" data-app="store"><img src="images/appstore.jpg" alt="App Store"><span>App Store</span></div>
+          <div class="app"><img src="images/settings.jpg" alt="Réglages"><span>Réglages</span></div>
+        </div>
+        <div id="ctx" class="ctx" hidden><button id="uninstall" type="button">Désinstaller l'app</button></div>
+        <!-- Dock -->
+        <div id="dock" class="dock">
+          <div class="app"><img src="images/phone.jpg" alt="Téléphone"></div>
+          <div class="app"><img src="images/safari.jpg" alt="Safari"></div>
+          <div class="app"><img src="images/messages.jpg" alt="Messages"></div>
+          <div class="app" data-app="camera"><img src="images/camera.jpg" alt="Appareil photo"></div>
+        </div>
+      </div>
+
+      <!-- Lock Screen Wrapper -->
+      <div id="lock-screen" class="lock-screen">
+        <div class="lock">
+          <span id="lock-date" class="date"></span>
+          <span id="lock-time" class="time"></span>
+        </div>
+      </div>
+
+      <!-- App window (App Store + apps installées) -->
+      <div id="app-window" class="app-window">
+        <div id="store" class="store">
+          <div class="store-head">
+            <div class="t"><h1 id="store-title">Apps</h1><span id="store-sub" class="sub"></span></div>
+            <button id="avatar" class="avatar" type="button" aria-label="Compte">?</button>
+            <div id="acct" class="acct" hidden><small id="acct-mail"></small><button id="logout" type="button">Se déconnecter</button></div>
+          </div>
+          <div class="store-body">
+            <div id="apps-view"><div id="apps-list"></div></div>
+            <form id="imp" hidden>
+              <label>Fichier HTML<input id="f-html" type="file" accept=".html,text/html"></label>
+              <label>Icône de l'app<input id="f-icon" type="file" accept="image/*"></label>
+              <label>Fichier JSON<input id="f-json" type="file" accept=".json,application/json"></label>
+              <p class="hint">JSON : {"Nom":"","ID":"","Description":"","Author":""}</p>
+              <p id="imp-size">Taille : —</p>
+              <p id="imp-msg" role="alert"></p>
+              <button class="pub" type="submit">Publier</button>
+            </form>
+            <div id="api" class="doc" hidden>
+              <p>Chaque app publiée reçoit automatiquement l'objet <b>iPhonyPhotos</b> : aucune installation, aucune clé. Il donne accès (lecture seule) aux photos et vidéos prises avec l'Appareil photo, après autorisation de l'utilisateur.</p>
+              <h3>Méthodes (toutes asynchrones)</h3>
+              <pre>status() → 'granted' | 'denied' | 'undetermined'
+requestAccess() → affiche la demande d'accès, renvoie le statut
+list({type, limit, offset, order}) → [{id, type, mime, width, height, duration, size, createdAt}]
+  type : 'photo' | 'video' · order : 'desc' (défaut) | 'asc'
+getBlob(id, {thumbnail}) → Blob
+getURL(id, {thumbnail}) → URL utilisable dans img / video
+openCamera() → ferme l'app et ouvre l'Appareil photo
+onChange(cb) → cb({type:'added'|'deleted', item}) ; renvoie une fonction pour se désabonner</pre>
+              <h3>Exemple</h3>
+              <pre>if (await iPhonyPhotos.requestAccess() === 'granted') {
+  const items = await iPhonyPhotos.list({ limit: 20 });
+  for (const it of items) {
+    const img = new Image();
+    img.src = await iPhonyPhotos.getURL(it.id, { thumbnail: true });
+    document.body.append(img);
+  }
+  iPhonyPhotos.onChange((e) =&gt; console.log(e.type, e.item));
+}</pre>
+            </div>
+          </div>
+          <nav id="tabs" class="tabs">
+            <button data-t="apps" class="on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5 2 7.8l10 5.3 10-5.3z"/><path d="m4.2 11.4-2.2 1.1 10 5.3 10-5.3-2.2-1.1-7.8 4.1z" opacity=".75"/><path d="m4.2 15.6-2.2 1.1 10 5.3 10-5.3-2.2-1.1-7.8 4.1z" opacity=".5"/></svg>Apps</button>
+            <button data-t="imp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>Importer</button>
+            <button data-t="api"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>API</button>
+          </nav>
+        </div>
+      </div>
+
+      <div id="cam" class="cam">
+        <div class="cam-top">
+          <button id="c-flash" aria-label="Flash"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></button>
+          <button id="c-timer" aria-label="Minuteur"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></button>
+        </div>
+        <div class="cam-view">
+          <video id="c-vid" playsinline muted autoplay></video>
+          <div id="c-fx" class="flashfx"></div><div id="c-rec" class="rec" hidden>00:00</div><div id="c-cnt" class="count" hidden></div><div id="c-msg" class="cam-msg" hidden></div>
+          <div id="c-zoom" class="zoom"><button data-z="1" class="on">1×</button><button data-z="2">2×</button></div>
+        </div>
+        <div class="cam-bot">
+          <div id="c-modes" class="modes"><button data-m="video">VIDÉO</button><button data-m="photo" class="on">PHOTO</button></div>
+          <div class="shut-row"><button id="c-thumb" class="thumb" aria-label="Photothèque"></button><button id="c-shut" class="shut" aria-label="Déclencheur"><i></i></button><button id="c-flip" class="cam-flip" aria-label="Changer de caméra"><svg viewBox="0 0 24 24"><path d="M20 7H8a4 4 0 0 0-4 4M4 17h12a4 4 0 0 0 4-4M17 4l3 3-3 3M7 14l-3 3 3 3"/></svg></button></div>
+        </div>
+        <div id="gal" class="gal"><div class="gal-head"><button id="g-back">‹ Appareil photo</button><span id="g-count"></span></div><div id="g-grid" class="gal-grid"></div></div>
+        <div id="gv" class="gal-view"><div id="gv-stage" class="stage"></div><div class="vbar"><button id="gv-back">Retour</button><button id="gv-save">Enregistrer</button><button id="gv-del" style="color:#ff453a">Supprimer</button></div></div>
+      </div>
+      <div id="perm" class="perm" hidden><div class="pbox"><b id="perm-t"></b><p>Cette app pourra voir les photos et vidéos prises avec l'Appareil photo.</p><button id="perm-no">Refuser</button><button id="perm-ok">Autoriser</button></div></div>
+
+      <div class="home"></div>
+
+      <!-- Boot Screen -->
+      <div id="boot-screen" class="boot">
+        <svg class="logo" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('lock-time').textContent = `${h}:${m}`;
+      const d = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+      document.getElementById('lock-date').textContent = d.charAt(0).toUpperCase() + d.slice(1);
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Avertissement READ
+    const notice = document.getElementById('notice');
+    document.getElementById('read-link').addEventListener('click', (e) => { e.preventDefault(); notice.showModal(); });
+    document.getElementById('notice-close').addEventListener('click', () => notice.close());
+    notice.addEventListener('click', (e) => { if (e.target === notice) notice.close(); });
+
+    // Supabase (back-end : authentification)
+    const SUPABASE_URL = 'https://ssgttwyctjfcwopttwjx.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_mbpxm_7IzpI9OjeJbJFwQg_GD-B3Q5r';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage } });
+
+    let signUpMode = false;
+    const form = document.getElementById('signin');
+    const error = document.getElementById('error');
+    const submitBtn = document.getElementById('submit-btn');
+    const switchLink = document.getElementById('switch-link');
+
+    switchLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      signUpMode = !signUpMode;
+      submitBtn.textContent = signUpMode ? 'Créer un compte' : 'Se connecter';
+      switchLink.textContent = signUpMode ? 'J\'ai déjà un compte' : 'Créer un compte';
+      document.getElementById('password').autocomplete = signUpMode ? 'new-password' : 'current-password';
+      error.textContent = '';
+    });
+
+    function enterSimulator() {
+      document.getElementById('welcome').classList.add('gone');
+      renderHome();
+      document.getElementById('chassis').classList.remove('pre');
+      setTimeout(() => {
+        const boot = document.getElementById('boot-screen');
+        boot.classList.add('hidden');
+        setTimeout(() => { boot.style.display = 'none'; }, 700);
+      }, 3200);
+    }
+
+    function authMessage(err) {
+      const m = (err.message || '').toLowerCase();
+      if (m.includes('invalid login')) return 'E-mail ou mot de passe incorrect.';
+      if (m.includes('not confirmed')) return 'Confirmez votre e-mail avant de vous connecter.';
+      if (m.includes('already registered')) return 'Un compte existe déjà avec cet e-mail.';
+      if (m.includes('rate limit')) return 'Trop de tentatives. Réessayez dans quelques minutes.';
+      return 'Une erreur est survenue. Réessayez.';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const pass = document.getElementById('password').value;
+      if (!/^\S+@\S+\.\S+$/.test(email)) { error.textContent = 'Saisissez une adresse e-mail valide.'; return; }
+      if (pass.length < 6) { error.textContent = 'Le mot de passe doit contenir au moins 6 caractères.'; return; }
+      error.textContent = '';
+      submitBtn.disabled = true;
+      try {
+        const { data, error: err } = signUpMode
+          ? await db.auth.signUp({ email, password: pass })
+          : await db.auth.signInWithPassword({ email, password: pass });
+        if (err) { error.textContent = authMessage(err); return; }
+        if (!data.session) { error.textContent = 'Compte créé. Vérifiez votre e-mail pour le confirmer.'; return; }
+        enterSimulator();
+      } catch (_) {
+        error.textContent = 'Connexion impossible. Vérifiez votre réseau.';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Session enregistrée (localStorage) : connexion automatique
+    (async () => {
+      try {
+        const { data } = await db.auth.getSession();
+        if (data.session) { enterSimulator(); return; }
+      } catch (_) {}
+      document.getElementById('welcome').classList.remove('gone');
+    })();
+    document.getElementById('logout').addEventListener('click', async () => {
+      try { await db.auth.signOut(); } catch (_) {}
+      location.reload();
+    });
+
+    // ── App Store + apps installées
+    const $ = (id) => document.getElementById(id);
+    const win = $('app-window'), store = $('store'), homeBar = document.querySelector('.home');
+    const fmt = (n) => n < 1048576 ? (n / 1024).toFixed(1).replace('.', ',') + ' Ko' : (n / 1048576).toFixed(2).replace('.', ',') + ' Mo';
+    const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const getInstalled = () => { try { return JSON.parse(localStorage.getItem('iphony_apps') || '[]'); } catch (_) { return []; } };
+    const setInstalled = (a) => { try { localStorage.setItem('iphony_apps', JSON.stringify(a)); } catch (_) {} };
+
+    function openWindow() { win.classList.add('open'); homeBar.classList.add('dark'); }
+    function closeApp() {
+      closeCamera(); $('perm').hidden = true; for (const k in pending) delete pending[k];
+      win.classList.remove('open'); homeBar.classList.remove('dark');
+      win.querySelectorAll('iframe').forEach((f) => f.remove());
+      store.style.display = '';
+    }
+    homeBar.addEventListener('click', closeApp);
+
+    async function renderHome() {
+      const grid = document.querySelector('.app-grid');
+      grid.querySelectorAll('.user-app').forEach((n) => n.remove());
+      const ids = getInstalled();
+      if (!ids.length) return;
+      const { data } = await db.from('apps').select('id,name,icon').in('id', ids);
+      if (data) { const found = data.map((a) => a.id); const kept = ids.filter((i) => found.includes(i)); if (kept.length !== ids.length) setInstalled(kept); }
+      (data || []).forEach((a) => {
+        const d = document.createElement('div');
+        d.className = 'app user-app'; d.dataset.id = a.id;
+        d.innerHTML = `<img src="${esc(a.icon)}" alt=""><span>${esc(a.name)}</span>`;
+        grid.appendChild(d);
+      });
+    }
+
+    async function openUserApp(id) {
+      const { data } = await db.from('apps').select('html,name').eq('id', id).single();
+      if (!data) return;
+      openWindow(); store.style.display = 'none';
+      const f = document.createElement('iframe');
+      f.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals');
+      f.dataset.id = id; f.dataset.name = data.name; f.srcdoc = injectSDK(data.html);
+      win.appendChild(f);
+    }
+
+    document.querySelector('.app-grid').addEventListener('click', (e) => {
+      if (lpFired) { lpFired = false; return; }
+      const a = e.target.closest('.app');
+      if (!a) return;
+      if (a.dataset.app === 'store') { openWindow(); showTab('apps'); setAvatar(); }
+      else if (a.dataset.id) openUserApp(a.dataset.id);
+    });
+
+    // Appui long sur une app installée : Désinstaller
+    let lpTimer, lpFired = false, ctxId = null;
+    const ctx = $('ctx'), grid = document.querySelector('.app-grid');
+    grid.addEventListener('pointerdown', (e) => {
+      lpFired = false;
+      const a = e.target.closest('.user-app');
+      if (!a) return;
+      lpTimer = setTimeout(() => {
+        lpFired = true; ctxId = a.dataset.id;
+        const r = a.getBoundingClientRect(), sr = screen.getBoundingClientRect();
+        ctx.style.left = Math.min(Math.max(r.left - sr.left, 8), sr.width - 158) + 'px';
+        ctx.style.top = (r.bottom - sr.top + 2) + 'px';
+        ctx.hidden = false;
+      }, 500);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => grid.addEventListener(t, () => clearTimeout(lpTimer)));
+    document.addEventListener('pointerdown', (e) => { if (!ctx.contains(e.target)) ctx.hidden = true; });
+    $('uninstall').addEventListener('click', () => {
+      setInstalled(getInstalled().filter((i) => i !== ctxId));
+      grid.querySelectorAll('.user-app').forEach((n) => { if (n.dataset.id === ctxId) n.remove(); });
+      ctx.hidden = true;
+    });
+
+    const todayStr = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+    async function setAvatar() {
+      const m = (await db.auth.getSession()).data.session?.user?.email || '';
+      $('avatar').textContent = (m.split('@')[0] || '?').slice(0, 2).toUpperCase();
+      $('acct-mail').textContent = m;
+    }
+    $('avatar').addEventListener('click', () => { $('acct').hidden = !$('acct').hidden; });
+
+    function showTab(t) {
+      $('acct').hidden = true;
+      $('store-sub').textContent = t === 'apps' ? todayStr : '';
+      document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+      $('store-title').textContent = { apps: 'Apps', imp: 'Importer', api: 'API Photos' }[t];
+      $('api').hidden = t !== 'api';
+      $('apps-view').hidden = t !== 'apps';
+      $('imp').hidden = t !== 'imp';
+      if (t === 'apps') loadApps();
+    }
+    $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showTab(b.dataset.t); });
+
+    async function loadApps() {
+      const list = $('apps-list');
+      list.innerHTML = '<p class="empty">Chargement…</p>';
+      const uid = (await db.auth.getSession()).data.session?.user.id;
+      const [{ data, error }, mine] = await Promise.all([
+        db.from('apps').select('id,name,description,author,size,icon').order('created_at', { ascending: false }),
+        uid ? db.from('apps').select('id').eq('owner', uid) : Promise.resolve({ data: [] })
+      ]);
+      const own = (mine.data || []).map((a) => a.id);
+      if (error) { list.innerHTML = '<p class="empty">Impossible de charger les apps.</p>'; return; }
+      if (!data.length) { list.innerHTML = '<p class="empty">Aucune app publiée.<br>Ajoutez la première dans Importer.</p>'; return; }
+      const ids = getInstalled();
+      list.innerHTML = data.map((a) => `<div class="card"><img class="bg" src="${esc(a.icon)}" alt=""><img class="ic" src="${esc(a.icon)}" alt=""><div class="foot"><div class="info"><b>${esc(a.name)}</b><small>${esc(a.description)}</small><small>${esc(a.author)} · ${fmt(a.size)}</small></div><div class="act"><button class="get" data-id="${esc(a.id)}">${ids.includes(a.id) ? 'Ouvrir' : 'Obtenir'}</button>${own.includes(a.id) ? `<button class="del" data-id="${esc(a.id)}">Retirer</button>` : ''}</div></div></div>`).join('');
+    }
+    $('apps-list').addEventListener('click', async (e) => {
+      const d = e.target.closest('.del');
+      if (d) {
+        if (!d.classList.contains('armed')) {
+          d.classList.add('armed'); d.textContent = 'Confirmer';
+          setTimeout(() => { d.classList.remove('armed'); d.textContent = 'Retirer'; }, 3000);
+          return;
+        }
+        const { data, error } = await db.from('apps').delete().eq('id', d.dataset.id).select('id');
+        if (error || !data.length) { d.textContent = 'Échec'; return; }
+        setInstalled(getInstalled().filter((i) => i !== d.dataset.id));
+        loadApps(); renderHome();
+        return;
+      }
+      const b = e.target.closest('.get');
+      if (!b) return;
+      const ids = getInstalled();
+      if (ids.includes(b.dataset.id)) { openUserApp(b.dataset.id); return; }
+      setInstalled([...ids, b.dataset.id]);
+      b.textContent = 'Ouvrir';
+      renderHome();
+    });
+
+    // Importer
+    const inputs = ['f-html', 'f-icon', 'f-json'];
+    function updateSize() {
+      const fs = inputs.map((i) => $(i).files[0]).filter(Boolean);
+      $('imp-size').textContent = 'Taille : ' + (fs.length ? fmt(fs.reduce((n, f) => n + f.size, 0)) : '—');
+    }
+    inputs.forEach((i) => $(i).addEventListener('change', updateSize));
+
+    $('imp').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = $('imp-msg'), btn = e.target.querySelector('.pub');
+      const [h, ic, j] = inputs.map((i) => $(i).files[0]);
+      if (!h || !ic || !j) { msg.textContent = 'Ajoutez les 3 fichiers : HTML, icône et JSON.'; return; }
+      if (h.size > 3145728 || ic.size > 1048576) { msg.textContent = 'Fichiers trop lourds (HTML 3 Mo max, icône 1 Mo max).'; return; }
+      if (!ic.type.startsWith('image/')) { msg.textContent = 'L\'icône doit être une image.'; return; }
+      let m = {};
+      try {
+        const o = JSON.parse(await j.text());
+        const g = (...k) => { const key = Object.keys(o).find((x) => k.includes(x.toLowerCase())); return key ? String(o[key]).trim() : ''; };
+        m = { name: g('nom', 'name'), id: g('id'), description: g('description'), author: g('author', 'auteur') };
+      } catch (_) { msg.textContent = 'Le fichier JSON est invalide.'; return; }
+      if (!m.name || !m.id || !m.author) { msg.textContent = 'Le JSON doit contenir Nom, ID et Author.'; return; }
+      if (!/^[a-z0-9._-]{3,60}$/i.test(m.id)) { msg.textContent = 'ID : 3 à 60 caractères (lettres, chiffres, . _ -).'; return; }
+      btn.disabled = true; msg.textContent = '';
+      try {
+        const icon = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(ic); });
+        const { error } = await db.from('apps').insert({ ...m, size: h.size + ic.size + j.size, icon, html: await h.text() });
+        if (error) { msg.textContent = error.code === '23505' ? 'Cet ID existe déjà.' : 'Publication impossible. Réessayez.'; return; }
+        e.target.reset(); updateSize(); showTab('apps');
+      } catch (_) { msg.textContent = 'Publication impossible. Réessayez.'; }
+      finally { btn.disabled = false; }
+    });
+
+    function swipeUp() {
+      if (!lockScreen.classList.contains('unlocked')) unlock();
+      else if ((win.classList.contains('open') || camOpen) && startY > screen.getBoundingClientRect().bottom - 60) closeApp();
+    }
+
+    // Détection du swipe vers le haut
+    let startY = 0;
+    const screen = document.getElementById('screen');
+    const lockScreen = document.getElementById('lock-screen');
+
+    screen.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; });
+    screen.addEventListener('touchend', (e) => {
+      let endY = e.changedTouches[0].clientY;
+      if (startY - endY > 50) swipeUp();
+    });
+
+    screen.addEventListener('mousedown', (e) => { startY = e.clientY; });
+    screen.addEventListener('mouseup', (e) => {
+      let endY = e.clientY;
+      if (startY - endY > 50) swipeUp();
+    });
+
+    function unlock() {
+      lockScreen.classList.add('unlocked');
+      document.getElementById('home-screen').classList.add('visible');
+    }
+
+    // ── Photothèque (IndexedDB, par compte)
+    let mdbP;
+    const mdb = () => mdbP || (mdbP = (async () => {
+      const u = (await db.auth.getSession()).data.session?.user.id || 'anon';
+      return new Promise((res, rej) => { const r = indexedDB.open('iphony_media_' + u, 1); r.onupgradeneeded = () => r.result.createObjectStore('m', { keyPath: 'id' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    })());
+    const tx = async (mode, fn) => { const d = await mdb(); return new Promise((res, rej) => { const t = d.transaction('m', mode), rq = fn(t.objectStore('m')); t.oncomplete = () => res(rq.result); t.onerror = () => rej(t.error); }); };
+    const allMedia = async () => (await tx('readonly', (s) => s.getAll())).sort((a, b) => b.createdAt - a.createdAt);
+    const getMedia = (id) => tx('readonly', (s) => s.get(id));
+    const meta = (i) => ({ id: i.id, type: i.type, mime: i.mime, width: i.width, height: i.height, duration: i.duration, size: i.blob.size, createdAt: i.createdAt });
+    async function addMedia(o) { const it = { id: crypto.randomUUID(), createdAt: Date.now(), ...o }; await tx('readwrite', (s) => s.put(it)); broadcast('added', meta(it)); refreshThumb(); }
+    async function delMedia(id) { const it = await getMedia(id); await tx('readwrite', (s) => s.delete(id)); if (it) { broadcast('deleted', meta(it)); refreshThumb(); } }
+
+    // ── API iPhonyPhotos (pont postMessage vers les apps en iframe)
+    const SDK = '<script>(' + function () {
+      const p = {}, subs = new Set(); let n = 0;
+      const call = (method, args) => new Promise((res, rej) => { const id = ++n; p[id] = { res, rej }; parent.postMessage({ iphony: 1, id, method, args }, '*'); });
+      addEventListener('message', (e) => {
+        const m = e.data; if (!m || m.iphony !== 1 || e.source !== parent) return;
+        if (m.event) { subs.forEach((f) => f(m.detail)); return; }
+        const q = p[m.id]; if (!q) return; delete p[m.id];
+        m.error ? q.rej(new Error(m.error)) : q.res(m.result);
+      });
+      const kind = (o) => (o && o.thumbnail ? 'thumb' : 'blob');
+      window.iPhonyPhotos = {
+        status: () => call('status'), requestAccess: () => call('requestAccess'),
+        list: (o) => call('list', o || {}),
+        getBlob: (id, o) => call(kind(o), { id }),
+        getURL: async (id, o) => URL.createObjectURL(await call(kind(o), { id })),
+        openCamera: () => call('openCamera'),
+        onChange: (f) => { subs.add(f); return () => subs.delete(f); }
+      };
+    } + ')()<\/script>';
+    const injectSDK = (h) => /<head[^>]*>/i.test(h) ? h.replace(/<head[^>]*>/i, (m) => m + SDK) : SDK + h;
+
+    const PK = 'iphony_perm', pending = {};
+    const perms = () => { try { return JSON.parse(localStorage.getItem(PK) || '{}'); } catch (_) { return {}; } };
+    const frames = () => [...win.querySelectorAll('iframe')];
+    function askPerm(f) {
+      const id = f.dataset.id; if (pending[id]) return pending[id];
+      $('perm-t').textContent = '« ' + f.dataset.name + ' » souhaite accéder à vos photos et vidéos'; $('perm').hidden = false;
+      return pending[id] = new Promise((res) => {
+        const done = (ok) => { $('perm').hidden = true; const p = perms(); p[id] = ok ? 'granted' : 'denied'; try { localStorage.setItem(PK, JSON.stringify(p)); } catch (_) {} delete pending[id]; res(p[id]); };
+        $('perm-ok').onclick = () => done(true); $('perm-no').onclick = () => done(false);
+      });
+    }
+    function broadcast(type, item) { frames().forEach((f) => { if (perms()[f.dataset.id] === 'granted') f.contentWindow.postMessage({ iphony: 1, event: true, detail: { type, item } }, '*'); }); }
+    window.addEventListener('message', async (e) => {
+      const m = e.data; if (!m || m.iphony !== 1 || !m.method) return;
+      const f = frames().find((x) => x.contentWindow === e.source); if (!f) return;
+      const reply = (o) => e.source.postMessage({ iphony: 1, id: m.id, ...o }, '*');
+      try {
+        const st = perms()[f.dataset.id] || 'undetermined', a = m.args || {};
+        if (m.method === 'status') return reply({ result: st });
+        if (m.method === 'openCamera') { reply({ result: true }); closeApp(); openCamera(); return; }
+        if (m.method === 'requestAccess') return reply({ result: st === 'undetermined' ? await askPerm(f) : st });
+        if (st !== 'granted') return reply({ error: "Accès refusé : appelez requestAccess() d'abord." });
+        if (m.method === 'list') {
+          let l = await allMedia(); if (a.type === 'photo' || a.type === 'video') l = l.filter((i) => i.type === a.type);
+          if (a.order === 'asc') l.reverse(); const o = a.offset || 0; return reply({ result: l.slice(o, o + (a.limit || l.length)).map(meta) });
+        }
+        if (m.method === 'blob' || m.method === 'thumb') { const it = await getMedia(a.id); return reply(it ? { result: m.method === 'blob' ? it.blob : it.thumb } : { error: 'Média introuvable.' }); }
+        reply({ error: 'Méthode inconnue.' });
+      } catch (_) { reply({ error: 'Erreur interne.' }); }
+    });
+
+    // ── Appareil photo
+    const cam = $('cam'), vid = $('c-vid'), shut = $('c-shut'), show = (el, v) => { el.hidden = !v; };
+    let camOpen = false, stream = null, facing = 'environment', mirror = true, mode = 'photo', zoom = 1, flashOn = false, timerS = 0, rec = null, recT = 0, recI = 0, busy = false, thumbURL = '', gUrls = [], cur = null, curURL = '', ac;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const camErr = (t) => { $('c-msg').textContent = t; show($('c-msg'), true); };
+    const dur = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+    const track = () => stream && stream.getVideoTracks()[0];
+    const torch = (on) => { const t = track(); return t && t.getCapabilities && t.getCapabilities().torch ? t.applyConstraints({ advanced: [{ torch: on }] }).then(() => true, () => false) : Promise.resolve(false); };
+    const click = () => { try { ac = ac || new AudioContext(); const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 1200; g.gain.setValueAtTime(.15, ac.currentTime); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .06); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + .07); } catch (_) {} };
+    const thumbOf = (src, w, h) => { const c = document.createElement('canvas'), k = 240 / Math.max(w, h); c.width = Math.round(w * k); c.height = Math.round(h * k); c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); return new Promise((r) => c.toBlob(r, 'image/jpeg', .7)); };
+    function applyZoom() { vid.style.transform = (mirror ? 'scaleX(-1) ' : '') + 'scale(' + zoom + ')'; document.querySelectorAll('#c-zoom button').forEach((b) => b.classList.toggle('on', +b.dataset.z === zoom)); }
+    function stopStream() { if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } vid.srcObject = null; }
+
+    async function startCam() {
+      stopStream(); show($('c-msg'), false);
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return camErr('Caméra indisponible. Ouvrez iPhony en https ou sur localhost.');
+      const v = { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+      let s;
+      try { s = await navigator.mediaDevices.getUserMedia({ video: v, audio: mode === 'video' }); }
+      catch (_) { try { s = await navigator.mediaDevices.getUserMedia({ video: v }); } catch (e) { return camErr(e.name === 'NotAllowedError' ? "Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur." : 'Aucune caméra détectée.'); } }
+      if (!camOpen) { s.getTracks().forEach((t) => t.stop()); return; }
+      stream = s; vid.srcObject = s;
+      const fm = s.getVideoTracks()[0].getSettings().facingMode; mirror = fm ? fm === 'user' : true; applyZoom();
+      navigator.mediaDevices.enumerateDevices().then((d) => { $('c-flip').style.opacity = d.filter((x) => x.kind === 'videoinput').length > 1 ? 1 : .35; });
+    }
+    function shutterFx() { const f = $('c-fx'); f.style.transition = 'none'; f.style.opacity = .9; requestAnimationFrame(() => { f.style.transition = 'opacity .3s'; f.style.opacity = 0; }); click(); }
+
+    async function takePhoto() {
+      if (!stream || !vid.videoWidth) return;
+      if (flashOn) { if (await torch(true)) await sleep(300); else { const f = $('c-fx'); f.style.transition = 'none'; f.style.opacity = 1; await sleep(200); } }
+      const vw = vid.videoWidth, vh = vid.videoHeight, r = 3 / 4;
+      let sw = vw / vh > r ? vh * r : vw, sh = sw / r; sw /= zoom; sh /= zoom;
+      const c = document.createElement('canvas'); c.width = Math.round(Math.min(sw, 1536)); c.height = Math.round(c.width / r);
+      c.getContext('2d').drawImage(vid, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+      shutterFx(); if (flashOn) torch(false);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', .92));
+      await addMedia({ type: 'photo', mime: 'image/jpeg', blob, thumb: await thumbOf(c, c.width, c.height), width: c.width, height: c.height, duration: 0 });
+    }
+
+    async function toggleRec() {
+      if (rec) { rec.stop(); return; }
+      if (!stream) return;
+      const mt = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+      if (!mt) return camErr("Enregistrement vidéo non pris en charge par ce navigateur.");
+      const w = vid.videoWidth, h = vid.videoHeight, first = await thumbOf(vid, w, h), chunks = [], type = mt.split(';')[0];
+      if (flashOn) torch(true);
+      rec = new MediaRecorder(stream, { mimeType: mt });
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      rec.onstop = async () => {
+        clearInterval(recI); const d = (Date.now() - recT) / 1000; rec = null; shut.classList.remove('recording'); cam.classList.remove('recording'); show($('c-rec'), false); torch(false);
+        await addMedia({ type: 'video', mime: type, blob: new Blob(chunks, { type }), thumb: first, width: w, height: h, duration: d });
+      };
+      rec.start(1000); recT = Date.now(); shut.classList.add('recording'); cam.classList.add('recording'); $('c-rec').textContent = '0:00'; show($('c-rec'), true);
+      recI = setInterval(() => { $('c-rec').textContent = dur((Date.now() - recT) / 1000); }, 250);
+    }
+
+    shut.onclick = async () => {
+      if (rec) return toggleRec();
+      if (busy) return; busy = true;
+      try {
+        for (let i = timerS; i > 0; i--) { $('c-cnt').textContent = i; show($('c-cnt'), true); await sleep(1000); }
+        show($('c-cnt'), false);
+        mode === 'video' ? await toggleRec() : await takePhoto();
+      } finally { busy = false; }
+    };
+    $('c-flash').onclick = (e) => { flashOn = !flashOn; e.currentTarget.classList.toggle('on', flashOn); };
+    $('c-timer').onclick = (e) => { timerS = { 0: 3, 3: 10, 10: 0 }[timerS]; const b = e.currentTarget; timerS ? b.dataset.v = timerS : delete b.dataset.v; b.classList.toggle('on', !!timerS); };
+    $('c-flip').onclick = () => { if (rec || busy) return; facing = facing === 'user' ? 'environment' : 'user'; startCam(); };
+    $('c-zoom').onclick = (e) => { const b = e.target.closest('button'); if (b) { zoom = +b.dataset.z; applyZoom(); } };
+    $('c-modes').onclick = (e) => {
+      const b = e.target.closest('button'); if (!b || rec || busy || b.dataset.m === mode) return;
+      mode = b.dataset.m; if (mode === 'video') zoom = 1;
+      document.querySelectorAll('#c-modes button').forEach((x) => x.classList.toggle('on', x === b));
+      shut.classList.toggle('video', mode === 'video'); show($('c-zoom'), mode === 'photo'); startCam();
+    };
+
+    async function refreshThumb() {
+      const l = await allMedia(); if (thumbURL) URL.revokeObjectURL(thumbURL);
+      thumbURL = l[0] ? URL.createObjectURL(l[0].thumb) : ''; $('c-thumb').style.backgroundImage = thumbURL ? `url(${thumbURL})` : '';
+    }
+    async function openGal() {
+      const l = await allMedia(); gUrls.forEach((u) => URL.revokeObjectURL(u)); gUrls = [];
+      $('g-count').textContent = l.length + ' élément' + (l.length > 1 ? 's' : '');
+      const g = $('g-grid'); g.innerHTML = l.length ? '' : '<p class="empty" style="grid-column:1/-1">Aucune photo ni vidéo.<br>Prenez-en avec l\'Appareil photo.</p>';
+      l.forEach((it) => {
+        const u = URL.createObjectURL(it.thumb); gUrls.push(u);
+        const d = document.createElement('div'); d.style.backgroundImage = `url(${u})`;
+        if (it.type === 'video') { const sp = document.createElement('span'); sp.textContent = dur(it.duration); d.appendChild(sp); }
+        d.onclick = () => openView(it); g.appendChild(d);
+      });
+      $('gal').classList.add('open');
+    }
+    function openView(it) {
+      cur = it; curURL = URL.createObjectURL(it.blob);
+      const el = document.createElement(it.type === 'video' ? 'video' : 'img'); el.src = curURL;
+      if (it.type === 'video') { el.controls = true; el.autoplay = true; el.playsInline = true; }
+      $('gv-stage').replaceChildren(el); $('gv').classList.add('open');
+    }
+    function closeView() { $('gv').classList.remove('open'); $('gv-stage').replaceChildren(); if (curURL) URL.revokeObjectURL(curURL); curURL = ''; }
+    $('c-thumb').onclick = openGal;
+    $('g-back').onclick = () => $('gal').classList.remove('open');
+    $('gv-back').onclick = closeView;
+    $('gv-save').onclick = () => { const a = document.createElement('a'); a.href = curURL; a.download = 'iphony-' + cur.id.slice(0, 8) + '.' + (cur.type === 'video' ? (cur.mime.includes('mp4') ? 'mp4' : 'webm') : 'jpg'); a.click(); };
+    $('gv-del').onclick = async () => { const id = cur.id; closeView(); await delMedia(id); openGal(); };
+
+    function openCamera() { camOpen = true; cam.classList.add('open'); refreshThumb(); startCam(); }
+    function closeCamera() {
+      if (!camOpen) return; camOpen = false; cam.classList.remove('open'); $('gal').classList.remove('open'); closeView();
+      if (rec) { rec.stop(); setTimeout(stopStream, 400); } else stopStream();
+    }
+    $('dock').addEventListener('click', (e) => { if (e.target.closest('[data-app="camera"]')) openCamera(); });
+  </script>
+</body>
+</html>
